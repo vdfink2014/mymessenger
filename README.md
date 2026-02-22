@@ -1,0 +1,1 @@
+This is a messenger, encrypted with RSA. The backend is in Flask, with Python. Could switch to Go, but I'm too lazy for now. Also, I did not write the CSS for this, I copied over the examples from geeksforgeeks and freefrontend. Huge thanks to them. (Also includes a [[BIG SHOT]] function)
