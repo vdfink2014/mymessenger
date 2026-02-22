@@ -154,6 +154,14 @@
             font-weight: bold;
             color: var(--primary);
         }
+
+        .reminder2 {
+            display: block;
+            margin-top: 8px;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: var(--primary);
+        }
     </style>
 </head>
 <body>
@@ -162,17 +170,74 @@
         
         <div class="input-group">
             <label for="email">Username</label>
-            <input type="email" id="email" placeholder="Your username">
+            <input type="email" class="email" placeholder="Your username">
         </div>
         
-        <button type="submit">Register</button>
+        <button type="submit" class="submit">Register</button>
         
         <label class="reminder">Your account is linked to this device. Do not erase your device settings, otherwise you'll lose your account.</label>
+
+        <label class="reminder2"></label>
 
         <div class="divider">OR</div>
         
         <div class="footer">
-            <a href="sharecode">Login through share code.</a>
+            <a href="sharecode">Login through share code(please do not kill me i will add this).</a>
         </div>
     </div>
+    <script>
+        async function generateRSAKeypair() {
+            const keyPair = await window.crypto.subtle.generateKey(
+                {
+                name: "RSA-OAEP",
+                modulusLength: 4096,
+                publicExponent: new Uint8Array([1, 0, 1]),
+                hash: "SHA-256",
+                extractable: true
+                },
+                true,
+                ["encrypt", "decrypt"]
+            );
+
+            console.log("Public Key:", keyPair.publicKey);
+            console.log("Private Key:", keyPair.privateKey);
+            return keyPair;
+        }
+
+        const submitButton = document.querySelector(".submit");
+        const secondReminder = document.getElementsByClassName("reminder2")[0];
+
+        submitButton.addEventListener("click", async function (e) {
+                const username = document.getElementsByClassName("email")[0].value;
+
+                const keyPair = await generateRSAKeypair();
+
+                const privateKeyJWK = await window.crypto.subtle.exportKey("jwk", keyPair.privateKey);
+                const publicKeyJWK = await window.crypto.subtle.exportKey("jwk", keyPair.publicKey);
+                    
+                localStorage.setItem("privateKey", JSON.stringify(privateKeyJWK));
+                localStorage.setItem("username", username);
+
+                payload = {
+                    username: username,
+                    publicKey: JSON.stringify(publicKeyJWK)
+                }
+
+                response = await fetch("/register", {
+                    method: "POST",
+                    headers: {
+                        'Content-Type': 'application/json; charset=utf-8'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.status != 200) {
+                    secondReminder.innerHTML = "This username is taken.";
+                } else {
+                    secondReminder.innerHTML = "Login successful!";
+                    window.location.href = "/chat";
+                }
+            }
+        );
+    </script>
 </body>
