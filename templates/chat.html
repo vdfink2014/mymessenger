@@ -112,7 +112,7 @@
         }
 
         .sidebar-users {
-            width: 280px;
+            width: 300px;
             background-color: #ffffff;
             padding: 24px;
             border-right: 1px solid #eaeaea;
@@ -135,7 +135,6 @@
             flex-direction: column;
         }
 
-        /* Fixing Avatar URLs (pravatar needs IDs to show different faces) */
         .user-avatar {
             width: 42px;
             height: 42px;
@@ -143,7 +142,6 @@
             margin-right: 12px;
         }
 
-        /* Input Area at bottom */
         .input-area {
             display: flex;
             padding: 10px;
@@ -155,9 +153,12 @@
         function addUser(avatar, username) {
             const template = document.createElement("li");
             template.className = "user-card"
-            template.innerHTML = "<img src='" + avatar + "' alt='" + username + "' class='user-avatar'><div class='user-info'><span class='user-name'>" + username +"</span></div>"
+            template.innerHTML = "<img src='" + avatar + "' alt='" + username + "' class='user-avatar' id = '" + username +"'><div class='user-info'><span class='user-name'>" + username +"</span></div>"
             userList = document.getElementsByClassName("user-list")[0];
             userList.appendChild(template)
+            template.addEventListener("click", function (e) {
+                receiver = username
+            });
         }
 
         function addBigShot() {
@@ -169,24 +170,43 @@
 
         }
 
-        function addSenderMessage(avatar, username, message) {
-            const template = document.createElement("div");
-            template.className = "message sender-message"
-            template.innerHTML = "<img src='" + avatar + "' alt='" + username + "' class='avatar'>" + message
-            userList = document.getElementsByClassName("user-list")[0];
-            userList.appendChild(template)
+        async function decryptMessage(base64Message) {
+            privateKeyBase64 = localStorage.getItem('privateKey');
+            keyBuffer = Uint8Array.from(atob(privateKeyBase64), c => c.charCodeAt(0));
+            privateKey = await crypto.subtle.importKey(
+                "jwk",
+                keyBuffer,
+                { name: "RSA-OAEP", hash: "SHA-256" },
+                false,
+                ["decrypt"]
+            );
+            encryptedData = Uint8Array.from(atob(base64Message), c => c.charCodeAt(0));
+            decryptedBuffer = await crypto.subtle.decrypt(
+                { name: "RSA-OAEP" },
+                privateKey,
+                encryptedData
+            );
+            uint8Array = new TextEncoder().encode(decryptedBuffer);
+            let binary = '';
 
+            for (let i = 0; i < uint8Array.length; ++i)
+                binary += String.fromCharCode(uint8Array[i]);
+
+            return btoa(binary);
         }
 
-        function addReceiverMessage(avatar, username, message) {
+        function addSenderMessage(avatar, username, message) {
+            message = decryptMessage(message)
             const template = document.createElement("div");
             template.className = "message sender-message"
             template.innerHTML = "<img src='" + avatar + "' alt='" + username + "' class='avatar'>" + message
             userList = document.getElementsByClassName("message-container")[0];
             userList.appendChild(template)
+
         }
 
-        function addSenderMessage(avatar, username, message) {
+        function addReceiverMessage(avatar, username, message) {
+            message = decryptMessage(message)
             const template = document.createElement("div");
             template.className = "message receiver-message"
             template.innerHTML = "<img src='" + avatar + "' alt='" + username + "' class='avatar'>" + message
@@ -199,9 +219,147 @@
             userList.innerHTML = "";
         }
 
-        document.addEventListener("DOMContentLoaded", function (e) {
-            addBigShot();
-            addBigShot();
+        async function getMessages(sender, receiver) {
+            payload = {
+                "sender": sender,
+                "receiver": receiver
+            }
+            response = await fetch("/getmessages", {
+                    method: "POST",
+                    headers: {
+                        'Content-Type': 'application/json; charset=utf-8'
+                    },
+                    body: JSON.stringify(payload)
+                });
+            return response.json();
+        };
+
+        async function getMessagesLoop(sender, receiver) {
+            const messages = await getMessages(sender, receiver);
+            clearMessages();
+            
+            if (Array.isArray(messages)) {
+                messages.forEach(msg => {
+                    const isFromSender = msg.sender === sender;
+                    
+                    const avatar = msg.avatar || (isFromSender 
+                        ? "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxISDxATExMVFhUVFRUSEBUVGBUVDxAVFRUWFhUSFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMtNygtLisBCgoKDg0OGRAQGC0hICUyNzA1NSstLTctNzYtLTc1Mi0tLzc3Ky41LS0tLS0tLS0tKysrNy0rLS0tKzcrKy0rK//AABEIAQYAwAMBIgACEQEDEQH/..." 
+                        : "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxISDxATExMVFhUVFRUSEBUVGBUVDxAVFRUWFhUSFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMtNygtLisBCgoKDg0OGRAQGC0hICUyNzA1NSstLTctNzYtLTc1Mi0tLzc3Ky41LS0tLS0tLS0tKysrNy0rLS0tKzcrKy0rK//AABEIAQYAwAMBIgACEQEDEQH/...");
+                    
+                    const username = isFromSender ? sender : receiver;
+                    const messageText = msg.message || msg.text || "";
+
+                    messageText = decryptMessage(messageText)
+                    
+                    if (isFromSender) {
+                        addSenderMessage(avatar, username, messageText);
+                    } else {
+                        addReceiverMessage(avatar, username, messageText);
+                    }
+                });
+            }
+        }
+
+        async function getPublicKey(username) {
+            payload = {
+                "username": username
+            }
+            response = await fetch("/getpublickey", {
+                    method: "POST",
+                    headers: {
+                        'Content-Type': 'application/json; charset=utf-8'
+                    },
+                    body: JSON.stringify(payload)
+            });
+            return await response.json();
+        }
+
+        async function encryptMessage(message, receiver) {
+            const response = await getPublicKey(receiver);
+
+            const publicKeyJwk = JSON.parse(response.publicKey);
+
+            const publicKey = await crypto.subtle.importKey(
+                "jwk",
+                publicKeyJwk,
+                {
+                    name: "RSA-OAEP",
+                    hash: "SHA-256"
+                },
+                false,
+                ["encrypt"]
+            );
+
+            const encoded = new TextEncoder().encode(message);
+
+            const encrypted = await crypto.subtle.encrypt(
+                { name: "RSA-OAEP" },
+                publicKey,
+                encoded
+            );
+
+            const bytes = new Uint8Array(encrypted);
+            let binary = "";
+            for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary);
+        }
+
+        async function sendMessage(sender, receiver, message) {
+            message = await encryptMessage(message, receiver)
+            payload = {
+                "sender": sender,
+                "receiver": receiver,
+                "message": message
+            }
+            response = await fetch("/sendmessage", {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/json; charset=utf-8'
+                },
+                body: JSON.stringify(payload)
+            });
+        }
+
+        async function searchUser(user) {
+            payload = {
+                "username": user
+            }
+            response = await fetch("/searchuser", {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/json; charset=utf-8'
+                },
+                body: JSON.stringify(payload)
+            });
+            if (response.statuscode == 404) {
+                return false
+            }
+            return [true, await response.json()["avatar"]]
+        }
+
+        receiver = "vdfink"
+
+        document.addEventListener("DOMContentLoaded", async function (e) {
+            if (localStorage.getItem("username") === null) {
+                window.location.href = "/";
+            }
+            if (localStorage.getItem("privateKey") === null) {
+                window.location.href = "/";
+            }
+            document.getElementsByClassName("sendButton")[0].addEventListener("click", function (e) {
+                sendMessage(localStorage.getItem("username"), receiver, document.getElementsByClassName("sendText")[0].value)
+            });
+            document.getElementsByClassName("searchButton")[0].addEventListener("click", function (e) {
+                user = searchUser(document.getElementsByClassName("searchText")[0].value)
+                if (user == false) {
+                    alert("There is no such user")
+                } else {
+                    addUser(user[1], document.getElementsByClassName("searchText")[0].value)
+                }
+            });
+            
         });
 
     </script>
@@ -209,6 +367,8 @@
 
 <body>
     <aside class="sidebar-users">
+        <input class="searchUsers" type="text" style="flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ddd;" placeholder="Type a user...">
+        <button class="searchButton" style="margin-left: 10px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Search</button>
         <ul class="user-list">
             <li class="user-card">
                 <img src="data:image/jpeg;base64,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" alt="Sarah" class="user-avatar">
@@ -233,8 +393,8 @@
         </div>
 
         <div class="input-area">
-            <input type="text" style="flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ddd;" placeholder="Type your message...">
-            <button style="margin-left: 10px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Send</button>
+            <input class="sendText" type="text" style="flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ddd;" placeholder="Type your message...">
+            <button class="sendButton" style="margin-left: 10px; padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Send</button>
         </div>
     </main>
 </body>
