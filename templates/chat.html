@@ -326,7 +326,7 @@
 
         async function searchUser(user) {
             payload = {
-                "username": user
+                "user": user
             }
             response = await fetch("/searchuser", {
                 method: "POST",

@@ -21,6 +21,7 @@ def chat():
 def register():
     username = request.json["username"]
     publickey = request.json["publicKey"]
+    avatar = request.json["avatar"]
 
     for user in dbUsers.keys():
         if user == username:
